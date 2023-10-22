@@ -26,13 +26,13 @@ from typing import Iterator, Dict, List
 # ftp://ftp.ncbi.nih.gov/blast/matrices/
 import nwalign3 as nw
 
-__author__ = "Your Name"
-__copyright__ = "Universite Paris Diderot"
-__credits__ = ["Your Name"]
+__author__ = "OUADAH Lilia"
+__copyright__ = "Universite Paris Cité"
+__credits__ = ["OUADAH Lilia"]
 __license__ = "GPL"
 __version__ = "1.0.0"
-__maintainer__ = "Your Name"
-__email__ = "your@email.fr"
+__maintainer__ = "OUADAH Lilia"
+__email__ = "lilia.ouadah@etu.u-paris.fr"
 __status__ = "Developpement"
 
 
@@ -83,8 +83,18 @@ def read_fasta(amplicon_file: Path, minseqlen: int) -> Iterator[str]:
     :param minseqlen: (int) Minimum amplicon sequence length
     :return: A generator object that provides the Fasta sequences (str).
     """
-    pass
-
+    
+    seq = ""
+    with gzip.open(amplicon_file, "rt") as fasta :
+        for line in fasta :
+            if line[0] == ">" :
+                if len(seq)>=minseqlen:
+                        yield seq
+                seq =""
+                continue
+            seq+=line.strip()
+        if len(seq)>=minseqlen:
+            yield seq 
 
 def dereplication_fulllength(amplicon_file: Path, minseqlen: int, mincount: int) -> Iterator[List]:
     """Dereplicate the set of sequence
@@ -94,7 +104,23 @@ def dereplication_fulllength(amplicon_file: Path, minseqlen: int, mincount: int)
     :param mincount: (int) Minimum amplicon count
     :return: A generator object that provides a (list)[sequences, count] of sequence with a count >= mincount and a length >= minseqlen.
     """
-    pass
+    seq_counts = {}
+    sequences = []
+
+    for seq in read_fasta(amplicon_file, minseqlen):
+        if seq in seq_counts:
+            seq_counts[seq] += 1
+        else:
+            seq_counts[seq] = 1
+
+    for sequence, count in seq_counts.items():
+        if count >= mincount:
+            sequences.append([sequence, count])
+
+    sequences.sort(key=lambda x: x[1], reverse=True)
+
+    return iter(sequences)
+    
 
 def get_identity(alignment_list: List[str]) -> float:
     """Compute the identity rate between two sequences
@@ -102,7 +128,21 @@ def get_identity(alignment_list: List[str]) -> float:
     :param alignment_list:  (list) A list of aligned sequences in the format ["SE-QUENCE1", "SE-QUENCE2"]
     :return: (float) The rate of identity between the two sequences.
     """
-    pass
+    if len(alignment_list) != 2:
+        raise ValueError("Alignment list must contain exactly two sequences.")
+
+    sequence1, sequence2 = alignment_list
+
+    if len(sequence1) != len(sequence2):
+        raise ValueError("Sequences must have the same length for identity comparison.")
+
+    identical_nucleotides = sum(c1 == c2 for c1, c2 in zip(sequence1, sequence2))
+    alignment_length = len(sequence1)
+
+    # Calculate the identity rate as a percentage
+    identity_rate = (identical_nucleotides / alignment_length) * 100.0
+
+    return identity_rate
 
 def abundance_greedy_clustering(amplicon_file: Path, minseqlen: int, mincount: int, chunk_size: int, kmer_size: int) -> List:
     """Compute an abundance greedy clustering regarding sequence count and identity.
@@ -115,7 +155,10 @@ def abundance_greedy_clustering(amplicon_file: Path, minseqlen: int, mincount: i
     :param kmer_size: (int) A fournir mais non utilise cette annee
     :return: (list) A list of all the [OTU (str), count (int)] .
     """
-    pass
+
+    sequences = list(dereplication_fulllength(amplicon_file, minseqlen, mincount))
+    sequences.sort(key=lambda x: x[1], reverse=True)
+    return sequences
 
 
 def write_OTU(OTU_list: List, output_file: Path) -> None:
@@ -124,7 +167,10 @@ def write_OTU(OTU_list: List, output_file: Path) -> None:
     :param OTU_list: (list) A list of OTU sequences
     :param output_file: (Path) Path to the output file
     """
-    pass
+    with open (output_file, "w") as file:
+        for i in range(len(OTU_list)):
+            file.write(f">OTU_{i+1} occurrence:{OTU_list[i][1]}\n")
+            file.write(textwrap.fill(OTU_list[i][0]) + "\n")
 
 
 #==============================================================
@@ -137,6 +183,8 @@ def main(): # pragma: no cover
     # Get arguments
     args = get_arguments()
     # Votre programme ici
+    OTU_list = abundance_greedy_clustering(args.amplicon_file, args.minseqlen, args.mincount, 0, 0)
+    write_OTU(OTU_list, args.output_file)
 
 
 
